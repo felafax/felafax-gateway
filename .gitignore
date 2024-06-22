@@ -1,3 +1,5 @@
 /target
 .shuttle-storage
 Secrets*.toml
+.DS_Store
+**/env/
