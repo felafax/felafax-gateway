@@ -6,6 +6,7 @@
 
 pub mod client;
 pub mod error;
+pub mod firebase;
 pub mod types;
 
 use axum::{
@@ -20,6 +21,7 @@ use types::OaiChatCompletionRequest;
 
 struct BackendConfigs {
     secrets: SecretStore,
+    firebase: firebase::Firestore,
 }
 
 async fn hello() -> &'static str {
@@ -31,6 +33,13 @@ async fn chat_completion(
     Json(payload): Json<Value>,
 ) -> impl IntoResponse {
     println!("Received payload: {:?}", payload);
+
+    let document = backend_configs
+        .firebase
+        .get_customer_configs("XgxCmDMEfdhbmzsxsJE1")
+        .await
+        .unwrap();
+    println!("Documents: {:?}", document);
 
     let request: OaiChatCompletionRequest = match serde_json::from_value(payload) {
         Ok(req) => req,
@@ -72,7 +81,12 @@ async fn chat_completion(
 
 #[shuttle_runtime::main]
 async fn main(#[shuttle_runtime::Secrets] secrets: SecretStore) -> shuttle_axum::ShuttleAxum {
-    let backend_configs = BackendConfigs { secrets };
+    let firebase = firebase::Firestore::new(
+        &secrets
+            .get("FIREBASE_PROJECT_ID")
+            .unwrap_or_else(|| panic!("Error: FIREBASE_PROJECT_ID not found in secrets.")),
+    );
+    let backend_configs = BackendConfigs { secrets, firebase };
     let backend_configs = Arc::new(backend_configs);
 
     let router = Router::new()
