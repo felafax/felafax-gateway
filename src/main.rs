@@ -215,11 +215,17 @@ async fn chat_completion_test(
 
 #[shuttle_runtime::main]
 async fn main(#[shuttle_runtime::Secrets] secrets: SecretStore) -> shuttle_axum::ShuttleAxum {
+    // firebase init
     let firebase = firestore::Firestore::new(
         &secrets
             .get("FIREBASE_PROJECT_ID")
             .unwrap_or_else(|| panic!("Error: FIREBASE_PROJECT_ID not found in secrets.")),
     );
+    firebase
+        .init()
+        .await
+        .unwrap_or_else(|e| panic!("Failed to initialise firestore: {:?}", e));
+
     let backend_configs = BackendConfigs { secrets, firebase };
     let backend_configs = Arc::new(backend_configs);
 

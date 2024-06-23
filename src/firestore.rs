@@ -35,20 +35,24 @@ impl Firestore {
         self.project_id.clone()
     }
 
-    pub async fn get_client(&self) -> Result<firestore::FirestoreDb> {
+    pub async fn init(&self) -> Result<()> {
         //let db = FirestoreDb::new(&self.project_id).await?;
         let db = FirestoreDb::with_options_service_account_key_file(
             FirestoreDbOptions::new(self.get_project_id()),
             "firebase.json".into(),
         )
         .await?;
-        Ok(db)
+        self.db.set(db.clone()).unwrap();
+        Ok(())
+    }
+
+    pub fn get_client(&self) -> &firestore::FirestoreDb {
+        self.db.get().unwrap()
     }
 
     pub async fn get_customer_configs(&self, document_id: &str) -> Result<Option<CustomerConfig>> {
         let doc: Option<CustomerConfig> = self
             .get_client()
-            .await?
             .fluent()
             .select()
             .by_id_in(CUSTOMER_METADTA_COLLECTION_NAME)
@@ -61,7 +65,6 @@ impl Firestore {
     pub async fn list_all_collections(&self) -> Result<Vec<String>> {
         let doc = self
             .get_client()
-            .await?
             .fluent()
             .list()
             .collections()
