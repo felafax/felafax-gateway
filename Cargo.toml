@@ -10,7 +10,6 @@ async-trait = "0.1.80"
 axum = "0.7.4"
 axum-extra = { version = "0.9.3", features = ["typed-header"] }
 derive_builder = "0.20.0"
-firebase-rs = "2.1.2"
 firestore = "0.42.0"
 futures = "0.3.30"
 headers = "0.4.0"
