@@ -1,11 +1,11 @@
 use anyhow::Result;
-use firebase_rs::*;
+use firebase_rs;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
 const CUSTOMER_METADTA_COLLECTION_NAME: &'static str = "customers";
 
-pub struct Firestore {
+pub struct Firebase {
     project_id: String,
 }
 
@@ -16,7 +16,7 @@ pub struct CustomerConfig {
     pub api_key: String,
 }
 
-impl Firestore {
+impl Firebase {
     pub fn new(project_id: &str) -> Self {
         Self {
             project_id: project_id.to_string(),
@@ -29,7 +29,7 @@ impl Firestore {
 
     pub async fn get_client(&self) -> Result<firebase_rs::Firebase> {
         //let db = FirestoreDb::new(&self.project_id).await?;
-        let firebase = Firebase::new(&self.project_id).unwrap();
+        let firebase = firebase_rs::Firebase::new(&self.project_id).unwrap();
         Ok(firebase)
     }
 

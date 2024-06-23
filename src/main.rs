@@ -7,6 +7,7 @@
 pub mod client;
 pub mod error;
 pub mod firebase;
+pub mod firestore;
 pub mod types;
 
 use axum::{
@@ -21,7 +22,8 @@ use types::OaiChatCompletionRequest;
 
 struct BackendConfigs {
     secrets: SecretStore,
-    firebase: firebase::Firestore,
+    //firebase: firebase::Firebase,
+    firebase: firestore::Firestore,
 }
 
 async fn hello() -> &'static str {
@@ -54,11 +56,14 @@ async fn chat_completion(
         );
     }
 
-    // let's get customer config
+    println!("felafax_token: {:?}", felafax_token);
+
     let customer_config = backend_configs
         .firebase
         .get_customer_configs(&felafax_token.unwrap())
         .await;
+
+    println!("customer_config: {:?}", customer_config);
 
     if customer_config.is_err() || customer_config.as_ref().unwrap().is_none() {
         return (
@@ -67,6 +72,7 @@ async fn chat_completion(
         );
     }
     let customer_config = customer_config.unwrap().unwrap();
+    println!("customer_config: {:?}", customer_config);
 
     // let's parse the request payload into OpenAI spec
     let request: OaiChatCompletionRequest = match serde_json::from_value(payload) {
@@ -86,10 +92,15 @@ async fn chat_completion(
     //    .secrets
     //    .get("MAMBA_API_KEY")
     //    .unwrap_or_else(|| panic!("Error: MAMBA_API_KEY not found in secrets."));
-    let api_key = customer_config.api_key;
 
-    if customer_config.llm_name == "mamba" {
-        let llm_client = client::mamba::Mamba::new().with_api_key(api_key.as_str());
+    if customer_config.selected_llm_name == "claude" {
+        let api_key = customer_config
+            .llm_configs
+            .get("claude")
+            .unwrap()
+            .api_key
+            .clone();
+        let llm_client = client::claude::Claude::new().with_api_key(api_key.as_str());
         let response = match llm_client.chat(request.clone()).await {
             Ok(res) => res,
             Err(e) => {
@@ -100,13 +111,19 @@ async fn chat_completion(
                 );
             }
         };
-        println!("\n\nOpenAI response: {:?}\n\n", response);
+        println!("\n\nClaude response: {:?}\n\n", response);
 
         (
             StatusCode::OK,
             Json(serde_json::to_value(response).unwrap()),
         )
-    } else if customer_config.llm_name == "openai" {
+    } else if customer_config.selected_llm_name == "openai" {
+        let api_key = customer_config
+            .llm_configs
+            .get("openai")
+            .unwrap()
+            .api_key
+            .clone();
         let llm_client = client::openai::OpenAI::new().with_api_key(api_key.as_str());
         let response = match llm_client.chat(request.clone()).await {
             Ok(res) => res,
@@ -124,10 +141,34 @@ async fn chat_completion(
             StatusCode::OK,
             Json(serde_json::to_value(response).unwrap()),
         )
+    } else if customer_config.selected_llm_name == "jamba" {
+        let api_key = customer_config
+            .llm_configs
+            .get("jamba")
+            .unwrap()
+            .api_key
+            .clone();
+        let llm_client = client::mamba::Mamba::new().with_api_key(api_key.as_str());
+        let response = match llm_client.chat(request.clone()).await {
+            Ok(res) => res,
+            Err(e) => {
+                eprintln!("Failed to get completion: {:?}", e);
+                return (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(json!({ "error": e.to_string() })),
+                );
+            }
+        };
+        println!("\n\nJamba response: {:?}\n\n", response);
+
+        (
+            StatusCode::OK,
+            Json(serde_json::to_value(response).unwrap()),
+        )
     } else {
         return (
             StatusCode::BAD_REQUEST,
-            Json(json!({ "error": "Invalid LLM name. Supported LLMs are: mamba, openai"})),
+            Json(json!({ "error": "Invalid LLM name. Supported LLMs are: mamba, openai, claude"})),
         );
     }
 }
@@ -176,7 +217,12 @@ async fn chat_completion_test(
 
 #[shuttle_runtime::main]
 async fn main(#[shuttle_runtime::Secrets] secrets: SecretStore) -> shuttle_axum::ShuttleAxum {
-    let firebase = firebase::Firestore::new(
+    //let firebase = firebase::Firebase::new(
+    //    &secrets
+    //        .get("FIREBASE_PROJECT_ID")
+    //        .unwrap_or_else(|| panic!("Error: FIREBASE_PROJECT_ID not found in secrets.")),
+    //);
+    let firebase = firestore::Firestore::new(
         &secrets
             .get("FIREBASE_PROJECT_ID")
             .unwrap_or_else(|| panic!("Error: FIREBASE_PROJECT_ID not found in secrets.")),
@@ -186,7 +232,7 @@ async fn main(#[shuttle_runtime::Secrets] secrets: SecretStore) -> shuttle_axum:
 
     let router = Router::new()
         .route("/", get(hello))
-        .route("/v1/chat/completions", post(chat_completion_test))
+        .route("/v1/chat/completions", post(chat_completion))
         .with_state(backend_configs);
 
     Ok(router.into())
