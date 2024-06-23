@@ -45,6 +45,7 @@ impl OpenAI {
 
 impl ChatTrait for OpenAI {
     async fn chat(&self, request: OaiChatCompletionRequest) -> Result<OaiChatCompletionResponse> {
+        println!("OPENAI REQUEST: {:?}", request);
         let config = async_openai::config::OpenAIConfig::new().with_api_key(self.api_key.clone());
         let client = async_openai::Client::with_config(config);
         let mut openai_request: async_openai::types::CreateChatCompletionRequest = request.into();

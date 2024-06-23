@@ -10,8 +10,8 @@ pub mod firebase;
 pub mod types;
 
 use axum::{
-    extract::State, http::StatusCode, response::IntoResponse, routing::get, routing::post, Json,
-    Router,
+    extract::State, http::header::HeaderMap, http::header::AUTHORIZATION, http::StatusCode,
+    response::IntoResponse, routing::get, routing::post, Json, Router,
 };
 use client::traits::*;
 use serde_json::{json, Value};
@@ -28,55 +28,108 @@ async fn hello() -> &'static str {
     "Hello from Felafax 🦊\nSupported routes: /v1/chat/completions"
 }
 
+fn extract_bearer_token(headers: &HeaderMap) -> Option<String> {
+    if let Some(auth_header) = headers.get(AUTHORIZATION) {
+        if let Ok(auth_str) = auth_header.to_str() {
+            if auth_str.starts_with("Bearer ") {
+                return Some(auth_str[7..].to_string());
+            }
+        }
+    }
+    None
+}
+
 async fn chat_completion(
+    headers: HeaderMap,
     State(backend_configs): State<Arc<BackendConfigs>>,
     Json(payload): Json<Value>,
 ) -> impl IntoResponse {
-    println!("Received payload: {:?}", payload);
+    // get the customer felfax token from header
+    let felafax_token = extract_bearer_token(&headers);
 
-    let document = backend_configs
+    if felafax_token.is_none() {
+        return (
+            StatusCode::UNAUTHORIZED,
+            Json(json!({ "error": "Unauthorized: Missing or invalid token." })),
+        );
+    }
+
+    // let's get customer config
+    let customer_config = backend_configs
         .firebase
-        .get_customer_configs("XgxCmDMEfdhbmzsxsJE1")
-        .await
-        .unwrap();
-    println!("Documents: {:?}", document);
+        .get_customer_configs(&felafax_token.unwrap())
+        .await;
 
+    if customer_config.is_err() || customer_config.as_ref().unwrap().is_none() {
+        return (
+            StatusCode::UNAUTHORIZED,
+            Json(json!({ "error": "Invalid felafax token" })),
+        );
+    }
+    let customer_config = customer_config.unwrap().unwrap();
+
+    // let's parse the request payload into OpenAI spec
     let request: OaiChatCompletionRequest = match serde_json::from_value(payload) {
         Ok(req) => req,
         Err(e) => {
             eprintln!("Failed to deserialize request: {:?}", e);
             return (
                 StatusCode::BAD_REQUEST,
-                Json(json!({ "error": e.to_string() })),
+                Json(
+                    json!({ "error": format!("Error while parsing request. Maybe it's not following OpenAI spec\nError: {} ", e.to_string()) }),
+                ),
             );
         }
     };
 
-    println!("Request: {:?}", request);
-    let mamba_api_key = backend_configs
-        .secrets
-        .get("MAMBA_API_KEY")
-        .unwrap_or_else(|| panic!("Error: MAMBA_API_KEY not found in secrets."));
+    //let mamba_api_key = backend_configs
+    //    .secrets
+    //    .get("MAMBA_API_KEY")
+    //    .unwrap_or_else(|| panic!("Error: MAMBA_API_KEY not found in secrets."));
+    let api_key = customer_config.api_key;
 
-    // Mamba
-    let mamba = client::mamba::Mamba::new().with_api_key(mamba_api_key.as_str());
+    if customer_config.llm_name == "mamba" {
+        let llm_client = client::mamba::Mamba::new().with_api_key(api_key.as_str());
+        let response = match llm_client.chat(request.clone()).await {
+            Ok(res) => res,
+            Err(e) => {
+                eprintln!("Failed to get completion: {:?}", e);
+                return (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(json!({ "error": e.to_string() })),
+                );
+            }
+        };
+        println!("\n\nOpenAI response: {:?}\n\n", response);
 
-    let openai_response = match mamba.chat(request.clone()).await {
-        Ok(res) => res,
-        Err(e) => {
-            eprintln!("Failed to get completion: {:?}", e);
-            return (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(json!({ "error": e.to_string() })),
-            );
-        }
-    };
-    println!("\n\nOpenAI response: {:?}\n\n", openai_response);
+        (
+            StatusCode::OK,
+            Json(serde_json::to_value(response).unwrap()),
+        )
+    } else if customer_config.llm_name == "openai" {
+        let llm_client = client::openai::OpenAI::new().with_api_key(api_key.as_str());
+        let response = match llm_client.chat(request.clone()).await {
+            Ok(res) => res,
+            Err(e) => {
+                eprintln!("Failed to get completion: {:?}", e);
+                return (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(json!({ "error": e.to_string() })),
+                );
+            }
+        };
+        println!("\n\nOpenAI response: {:?}\n\n", response);
 
-    (
-        StatusCode::OK,
-        Json(serde_json::to_value(openai_response).unwrap()),
-    )
+        (
+            StatusCode::OK,
+            Json(serde_json::to_value(response).unwrap()),
+        )
+    } else {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(json!({ "error": "Invalid LLM name. Supported LLMs are: mamba, openai"})),
+        );
+    }
 }
 
 #[shuttle_runtime::main]
