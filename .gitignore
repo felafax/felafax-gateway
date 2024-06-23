@@ -4,3 +4,4 @@ Secrets*.toml
 .DS_Store
 **/env/
 firebase.json
+Cargo.lock
