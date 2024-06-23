@@ -132,6 +132,48 @@ async fn chat_completion(
     }
 }
 
+async fn chat_completion_test(
+    headers: HeaderMap,
+    State(backend_configs): State<Arc<BackendConfigs>>,
+    Json(payload): Json<Value>,
+) -> impl IntoResponse {
+    // let's parse the request payload into OpenAI spec
+    let request: OaiChatCompletionRequest = match serde_json::from_value(payload) {
+        Ok(req) => req,
+        Err(e) => {
+            eprintln!("Failed to deserialize request: {:?}", e);
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(
+                    json!({ "error": format!("Error while parsing request. Maybe it's not following OpenAI spec\nError: {} ", e.to_string()) }),
+                ),
+            );
+        }
+    };
+
+    let api_key = backend_configs
+        .secrets
+        .get("CLAUDE_API_KEY")
+        .unwrap_or_else(|| panic!("Error: API_KEY not found in secrets."));
+
+    let llm_client = client::claude::Claude::new().with_api_key(api_key.as_str());
+
+    let response = match llm_client.chat(request.clone()).await {
+        Ok(res) => res,
+        Err(e) => {
+            eprintln!("Failed to get completion: {:?}", e);
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({ "error": e.to_string() })),
+            );
+        }
+    };
+    (
+        StatusCode::OK,
+        Json(serde_json::to_value(response).unwrap()),
+    )
+}
+
 #[shuttle_runtime::main]
 async fn main(#[shuttle_runtime::Secrets] secrets: SecretStore) -> shuttle_axum::ShuttleAxum {
     let firebase = firebase::Firestore::new(
@@ -144,7 +186,7 @@ async fn main(#[shuttle_runtime::Secrets] secrets: SecretStore) -> shuttle_axum:
 
     let router = Router::new()
         .route("/", get(hello))
-        .route("/v1/chat/completions", post(chat_completion))
+        .route("/v1/chat/completions", post(chat_completion_test))
         .with_state(backend_configs);
 
     Ok(router.into())

@@ -35,9 +35,14 @@ struct MessageRequest {
 #[derive(Default, Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 struct ClaudeCompletionRequest {
     model: String,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
     max_tokens: Option<u32>,
+
     messages: Vec<MessageRequest>,
-    stream: bool,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
+    stream: Option<bool>,
 }
 
 #[derive(Default, Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -129,14 +134,57 @@ impl Claude {
     }
 }
 
+impl ChatTrait for Claude {
+    async fn chat(&self, request: OaiChatCompletionRequest) -> Result<OaiChatCompletionResponse> {
+        //convert request to Claude request
+        let mut claude_request: ClaudeCompletionRequest = request.into();
+        claude_request.model = self.get_default_model();
+
+        println!("CLAUDE REQUEST: {:?}", claude_request);
+
+        let http_response = reqwest::Client::new()
+            .post(format!("{url}/v1/messages", url = self.get_base_url()))
+            .header("x-api-key", &self.get_api_key())
+            .header("content-type", "application/json")
+            .header("anthropic-version", "2023-06-01")
+            .header("anthropic-beta", "messages-2023-12-15")
+            .json(&claude_request)
+            .send()
+            .await?;
+
+        if !http_response.status().is_success() {
+            let status = http_response.status().as_u16();
+            let error_text = http_response
+                .text()
+                .await
+                .unwrap_or_else(|_| "Failed to read response text".to_string());
+
+            println!("CLAUDE ERROR: {:?}", error_text);
+            tracing::error!(
+                status = status,
+                error = error_text.as_str(),
+                "Failed to make completion request to Claude"
+            );
+            bail!(
+                "Failed to make completion request to Claude: {}",
+                error_text
+            );
+        }
+        let result = http_response.json::<ClaudeCompletionResponse>().await?;
+        //convert to ChatCompletionResponse
+        Ok(result.into())
+    }
+}
+
 impl From<OaiChatCompletionRequest> for ClaudeCompletionRequest {
     fn from(value: OaiChatCompletionRequest) -> Self {
         let mut request_builder = ClaudeCompletionRequest::default();
 
-        // TODO: take users model
-        //request_builder.model = value.model;
+        //TODO: take users model
+        request_builder.model = value.model;
 
-        request_builder.max_tokens = value.max_tokens;
+        // TODO: Claude expects max_tokens always
+        request_builder.max_tokens = Some(value.max_tokens.unwrap_or(4096));
         request_builder.messages = value
             .messages
             .into_iter()
@@ -145,7 +193,7 @@ impl From<OaiChatCompletionRequest> for ClaudeCompletionRequest {
                 content: msg.content,
             })
             .collect();
-        request_builder.stream = value.stream.unwrap_or(false);
+        request_builder.stream = value.stream;
 
         request_builder
     }
@@ -188,34 +236,5 @@ impl From<ClaudeCompletionResponse> for OaiChatCompletionResponse {
             })
             .build()
             .unwrap()
-    }
-}
-
-impl ChatTrait for Claude {
-    async fn chat(&self, request: OaiChatCompletionRequest) -> Result<OaiChatCompletionResponse> {
-        //convert request to Claude request
-        let mut claude_request: ClaudeCompletionRequest = request.into();
-        claude_request.model = self.get_default_model();
-
-        let response = reqwest::Client::new()
-            .post(format!("{url}/v1/messages", url = self.get_base_url()))
-            .header("x-api-key", &self.get_api_key())
-            .header("content-type", "application/json")
-            .header("anthropic-version", "2023-06-01")
-            .header("anthropic-beta", "messages-2023-12-15")
-            .json(&claude_request)
-            .send()
-            .await?;
-
-        if !response.status().is_success() {
-            tracing::error!(
-                status = response.status().as_u16(),
-                "Failed to make completion request to Claude"
-            );
-            bail!("Failed to make completion request to Claude");
-        }
-        let response = response.json::<ClaudeCompletionResponse>().await?;
-        //convert to ChatCompletionResponse
-        Ok(response.into())
     }
 }
