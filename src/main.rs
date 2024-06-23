@@ -6,7 +6,6 @@
 
 pub mod client;
 pub mod error;
-pub mod firebase;
 pub mod firestore;
 pub mod types;
 
@@ -22,7 +21,6 @@ use types::OaiChatCompletionRequest;
 
 struct BackendConfigs {
     secrets: SecretStore,
-    //firebase: firebase::Firebase,
     firebase: firestore::Firestore,
 }
 
@@ -217,11 +215,6 @@ async fn chat_completion_test(
 
 #[shuttle_runtime::main]
 async fn main(#[shuttle_runtime::Secrets] secrets: SecretStore) -> shuttle_axum::ShuttleAxum {
-    //let firebase = firebase::Firebase::new(
-    //    &secrets
-    //        .get("FIREBASE_PROJECT_ID")
-    //        .unwrap_or_else(|| panic!("Error: FIREBASE_PROJECT_ID not found in secrets.")),
-    //);
     let firebase = firestore::Firestore::new(
         &secrets
             .get("FIREBASE_PROJECT_ID")
