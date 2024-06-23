@@ -36,7 +36,12 @@ impl Firestore {
     }
 
     pub async fn get_client(&self) -> Result<firestore::FirestoreDb> {
-        let db = FirestoreDb::new(&self.project_id).await?;
+        //let db = FirestoreDb::new(&self.project_id).await?;
+        let db = FirestoreDb::with_options_service_account_key_file(
+            FirestoreDbOptions::new(self.get_project_id()),
+            "firebase.json".into(),
+        )
+        .await?;
         Ok(db)
     }
 
