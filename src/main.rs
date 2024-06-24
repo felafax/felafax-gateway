@@ -74,8 +74,8 @@ async fn log_stats(
             request_logs.completion_tokens(usage.completion_tokens);
             request_logs.total_tokens(usage.total_tokens);
         }
-        request_logs.total_latency(latency);
     }
+    request_logs.total_latency(latency);
 
     if let Some(error) = error {
         request_logs.error(error);
