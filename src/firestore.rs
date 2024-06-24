@@ -4,7 +4,7 @@ use once_cell::sync::OnceCell;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
-const CUSTOMER_METADTA_COLLECTION_NAME: &'static str = "customers";
+const METADTA_COLLECTION_NAME: &'static str = "configs";
 
 pub struct Firestore {
     project_id: String,
@@ -55,7 +55,7 @@ impl Firestore {
             .get_client()
             .fluent()
             .select()
-            .by_id_in(CUSTOMER_METADTA_COLLECTION_NAME)
+            .by_id_in(METADTA_COLLECTION_NAME)
             .obj()
             .one(document_id)
             .await?;
