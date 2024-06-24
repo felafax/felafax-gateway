@@ -40,17 +40,18 @@ print(completion.choices[0].message.content)
 ```
 
 # Supported Features
-### Support LLMs
-[*] OpeAI
-[*] Claude
-[*] Jamba
+
+### Supported LLMs
+- [x] OpenAI
+- [x] Claude
+- [x] Jamba
 
 We support `/chat/completions` for each of these LLMs.
 
-
 ## TODO
-[ ] Adding `streaming` support
-[ ] Easy deployable config
-[ ] Request stats logging
-[ ] Routing logs to S3 or other storage connectors (Splunk)
-[ ] Monitoring & observability
+- [ ] Adding `streaming` support
+- [ ] Easy deployable config
+- [ ] Request stats logging
+- [ ] Routing logs to S3 or other storage connectors (Splunk)
+- [ ] Monitoring & observability
+
