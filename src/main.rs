@@ -71,6 +71,8 @@ async fn log_stats(
     }
 
     if let Some(response) = response {
+        request_logs.response(serde_json::to_string(&response).unwrap());
+
         request_logs.llm_model(serde_json::to_string(&response.model).unwrap());
         if let Some(usage) = &response.usage {
             request_logs.prompt_tokens(usage.prompt_tokens);
