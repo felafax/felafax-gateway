@@ -1,16 +1,20 @@
 use crate::clickhouse as cl;
+use crate::firestore;
 use anyhow::Result;
 use clickhouse::Row;
 use derive_builder::Builder;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
+use uuid::Uuid;
 
 #[derive(Debug, Builder, Deserialize, Clone, PartialEq, Serialize, Row, Default)]
 #[builder(setter(into, strip_option), default)]
 #[builder(pattern = "mutable")]
 #[builder(derive(Debug))]
 pub struct RequestLog {
+    pub id: String,
+
     pub timestamp: i64,
 
     pub customer_id: String,
@@ -47,9 +51,18 @@ pub struct RequestLog {
 }
 
 impl RequestLog {
-    pub async fn log(&self, client: &Arc<cl::Clickhouse>) -> Result<()> {
+    pub async fn log(
+        &self,
+        client: &Arc<cl::Clickhouse>,
+        firestore: &Arc<firestore::Firestore>,
+    ) -> Result<()> {
         println!("Logging request: {:?}", self);
-        client.insert_row("request_logs", self.clone()).await?;
+        // TODO: move ot clickhouse or postgres
+        //client.insert_row("request_logs", self.clone()).await?;
+        firestore
+            .insert_request_log(&self.clone())
+            .await
+            .unwrap_or_else(|e| eprintln!("Failed to log request: {:?}", e));
         Ok(())
     }
 }

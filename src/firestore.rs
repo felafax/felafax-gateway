@@ -1,3 +1,4 @@
+use crate::request_logs;
 use anyhow::{anyhow, Result};
 use firestore::*;
 use once_cell::sync::OnceCell;
@@ -72,5 +73,17 @@ impl Firestore {
             .await?
             .collection_ids;
         Ok(doc)
+    }
+
+    pub async fn insert_request_log(&self, request_logs: &request_logs::RequestLog) -> Result<()> {
+        self.get_client()
+            .fluent()
+            .insert()
+            .into("request_logs")
+            .document_id(&request_logs.id)
+            .object(request_logs)
+            .execute()
+            .await?;
+        Ok(())
     }
 }

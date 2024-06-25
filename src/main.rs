@@ -21,10 +21,11 @@ use serde_json::{json, Value};
 use shuttle_runtime::SecretStore;
 use std::sync::Arc;
 use types::{OaiChatCompletionRequest, OaiChatCompletionResponse};
+use uuid::Uuid;
 
 pub struct BackendConfigs {
     secrets: SecretStore,
-    firebase: firestore::Firestore,
+    firebase: Arc<firestore::Firestore>,
     clickhouse: Arc<clickhouse::Clickhouse>,
 }
 
@@ -45,6 +46,7 @@ fn extract_bearer_token(headers: &HeaderMap) -> Option<String> {
 
 async fn log_stats(
     clickhouse_client: Arc<clickhouse::Clickhouse>,
+    firebase_client: Arc<firestore::Firestore>,
     status_code: StatusCode,
     felafax_token: &str,
     request: Option<&OaiChatCompletionRequest>,
@@ -55,6 +57,7 @@ async fn log_stats(
 ) {
     let clickhouse_client = clickhouse_client.clone();
     let mut request_logs = request_logs::RequestLogBuilder::default();
+    request_logs.id(Uuid::new_v4().to_string());
     request_logs.timestamp(Utc::now().timestamp());
 
     request_logs.customer_id(felafax_token);
@@ -83,9 +86,10 @@ async fn log_stats(
 
     let request_logs = request_logs.build().unwrap();
 
+    // log in background
     tokio::task::spawn(async move {
         request_logs
-            .log(&clickhouse_client)
+            .log(&clickhouse_client, &firebase_client)
             .await
             .unwrap_or_else(|e| eprintln!("Failed to log request: {:?}", e));
     });
@@ -93,6 +97,7 @@ async fn log_stats(
 
 async fn log_and_respond(
     clickhouse_client: Arc<clickhouse::Clickhouse>,
+    firebase: Arc<firestore::Firestore>,
     status_code: StatusCode,
     felafax_token: &str,
     request: Option<&OaiChatCompletionRequest>,
@@ -103,6 +108,7 @@ async fn log_and_respond(
 ) -> impl IntoResponse {
     log_stats(
         clickhouse_client.clone(),
+        firebase.clone(),
         status_code,
         felafax_token,
         request,
@@ -130,6 +136,7 @@ async fn chat_completion(
         None => {
             return log_and_respond(
                 backend_configs.clickhouse.clone(),
+                backend_configs.firebase.clone(),
                 StatusCode::UNAUTHORIZED,
                 "",
                 None,
@@ -151,6 +158,7 @@ async fn chat_completion(
         _ => {
             return log_and_respond(
                 backend_configs.clickhouse.clone(),
+                backend_configs.firebase.clone(),
                 StatusCode::UNAUTHORIZED,
                 &felafax_token,
                 None,
@@ -168,6 +176,7 @@ async fn chat_completion(
         Err(e) => {
             return log_and_respond(
                 backend_configs.clickhouse.clone(),
+                backend_configs.firebase.clone(),
                 StatusCode::BAD_REQUEST,
                 &felafax_token,
                 None,
@@ -220,6 +229,7 @@ async fn chat_completion(
         _ => {
             return log_and_respond(
                 backend_configs.clickhouse.clone(),
+                backend_configs.firebase.clone(),
                 StatusCode::BAD_REQUEST,
                 &felafax_token,
                 Some(&request),
@@ -236,6 +246,7 @@ async fn chat_completion(
         Ok(response) => {
             log_and_respond(
                 backend_configs.clickhouse.clone(),
+                backend_configs.firebase.clone(),
                 StatusCode::OK,
                 &felafax_token,
                 Some(&request),
@@ -249,6 +260,7 @@ async fn chat_completion(
         Err(e) => {
             log_and_respond(
                 backend_configs.clickhouse.clone(),
+                backend_configs.firebase.clone(),
                 StatusCode::INTERNAL_SERVER_ERROR,
                 &felafax_token,
                 Some(&request),
@@ -274,6 +286,8 @@ async fn main(#[shuttle_runtime::Secrets] secrets: SecretStore) -> shuttle_axum:
         .init()
         .await
         .unwrap_or_else(|e| panic!("Failed to initialise firestore: {:?}", e));
+
+    let firebase = Arc::new(firebase);
 
     // init clickhouse
     let click_house_url = secrets
