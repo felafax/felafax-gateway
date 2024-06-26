@@ -14,8 +14,9 @@ pub mod types;
 pub mod utils;
 
 use axum::{
-    extract::State, http::header::HeaderMap, http::header::AUTHORIZATION, http::StatusCode,
-    response::IntoResponse, routing::get, routing::post, Json, Router,
+    extract::OriginalUri, extract::State, http::header::HeaderMap, http::header::AUTHORIZATION,
+    http::StatusCode, response::IntoResponse, routing::any, routing::get, routing::post, Json,
+    Router,
 };
 use chrono::Utc;
 use client::traits::*;
@@ -41,6 +42,24 @@ pub async fn translate_chat_completion(
     Json(payload): Json<Value>,
 ) -> impl IntoResponse {
     let result = handlers::translate::chat_completion(headers, backend_configs, payload).await;
+    if result.is_ok() {
+        let (status_code, value) = result.unwrap();
+        let response = Json(value);
+        (status_code, response)
+    } else {
+        let status_code = StatusCode::INTERNAL_SERVER_ERROR;
+        (status_code, Json(json!("Internal server error")))
+    }
+}
+
+pub async fn proxy(
+    headers: HeaderMap,
+    OriginalUri(original_uri): OriginalUri,
+    State(backend_configs): State<Arc<BackendConfigs>>,
+    Json(payload): Json<Value>,
+) -> impl IntoResponse {
+    let result =
+        handlers::proxy::openai_proxy(headers, original_uri, backend_configs, payload).await;
     if result.is_ok() {
         let (status_code, value) = result.unwrap();
         let response = Json(value);
@@ -100,6 +119,7 @@ async fn main(#[shuttle_runtime::Secrets] secrets: SecretStore) -> shuttle_axum:
             "/translate/v1/chat/completions",
             post(translate_chat_completion),
         )
+        .fallback(any(proxy))
         .with_state(backend_configs);
 
     Ok(router.into())
