@@ -11,6 +11,7 @@ use axum::body::Body;
 use axum::{
     extract::State,
     http::header::{HeaderMap, AUTHORIZATION, CONTENT_TYPE},
+    http::Method,
     http::{StatusCode, Uri},
     response::{IntoResponse, Response},
     routing::get,
@@ -32,6 +33,7 @@ fn convert_err(err: reqwest::Error) -> std::io::Error {
 }
 
 pub async fn openai_proxy(
+    method: Method,
     headers: HeaderMap,
     original_uri: Uri,
     backend_configs: Arc<BackendConfigs>,
@@ -57,8 +59,21 @@ pub async fn openai_proxy(
     println!("Url: {:?}", &url.to_string());
 
     let client = reqwest::Client::new();
-    let mut request = client
-        .post(url)
+    let request = match method {
+        Method::GET => client.get(url),
+        Method::POST => client.post(url),
+        Method::PUT => client.put(url),
+        Method::DELETE => client.delete(url),
+        _ => {
+            return Ok((
+                StatusCode::METHOD_NOT_ALLOWED,
+                Json(json!({"error": "Method not allowed"})),
+            )
+                .into_response());
+        }
+    };
+
+    let mut request = request
         .header("Authorization", format!("Bearer {}", bearer_token))
         .json(&payload);
 

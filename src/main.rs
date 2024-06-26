@@ -15,8 +15,8 @@ pub mod utils;
 
 use axum::{
     extract::OriginalUri, extract::State, http::header::HeaderMap, http::header::AUTHORIZATION,
-    http::StatusCode, response::IntoResponse, routing::any, routing::get, routing::post, Json,
-    Router,
+    http::Method, http::StatusCode, response::IntoResponse, routing::any, routing::get,
+    routing::post, Json, Router,
 };
 use chrono::Utc;
 use client::traits::*;
@@ -53,13 +53,15 @@ pub async fn translate_chat_completion(
 }
 
 pub async fn proxy(
+    method: Method,
     headers: HeaderMap,
     OriginalUri(original_uri): OriginalUri,
     State(backend_configs): State<Arc<BackendConfigs>>,
     Json(payload): Json<Value>,
 ) -> impl IntoResponse {
     let result =
-        handlers::proxy::openai_proxy(headers, original_uri, backend_configs, payload).await;
+        handlers::proxy::openai_proxy(method, headers, original_uri, backend_configs, payload)
+            .await;
     if result.is_ok() {
         let response = result.unwrap();
         (StatusCode::OK, response).into_response()
