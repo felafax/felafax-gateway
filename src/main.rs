@@ -61,12 +61,10 @@ pub async fn proxy(
     let result =
         handlers::proxy::openai_proxy(headers, original_uri, backend_configs, payload).await;
     if result.is_ok() {
-        let (status_code, value) = result.unwrap();
-        let response = Json(value);
-        (status_code, response)
+        let response = result.unwrap();
+        (StatusCode::OK, response).into_response()
     } else {
-        let status_code = StatusCode::INTERNAL_SERVER_ERROR;
-        (status_code, Json(json!("Internal server error")))
+        (StatusCode::OK, Json(json!("{}"))).into_response()
     }
 }
 

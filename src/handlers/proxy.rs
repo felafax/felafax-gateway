@@ -7,11 +7,19 @@ use crate::types::{OaiChatCompletionRequest, OaiChatCompletionResponse};
 use crate::utils;
 use crate::BackendConfigs;
 use anyhow::Result;
+use axum::body::Body;
 use axum::{
-    extract::State, http::header::HeaderMap, http::header::AUTHORIZATION, http::StatusCode,
-    http::Uri, response::IntoResponse, routing::get, routing::post, Json, Router,
+    extract::State,
+    http::header::{HeaderMap, AUTHORIZATION, CONTENT_TYPE},
+    http::{StatusCode, Uri},
+    response::{IntoResponse, Response},
+    routing::get,
+    routing::post,
+    Json, Router,
 };
+use bytes::Bytes;
 use chrono::Utc;
+use futures::stream::StreamExt;
 use native_tls::TlsConnector as NativeTlsConnector;
 use serde_json::{json, Value};
 use shuttle_runtime::SecretStore;
@@ -28,7 +36,7 @@ pub async fn openai_proxy(
     original_uri: Uri,
     backend_configs: Arc<BackendConfigs>,
     payload: Value,
-) -> Result<(StatusCode, Value)> {
+) -> Result<Response> {
     println!("OpenAI proxy request: {:?}", original_uri);
 
     let bearer_token = match utils::extract_bearer_token(&headers) {
@@ -36,8 +44,9 @@ pub async fn openai_proxy(
         None => {
             return Ok((
                 StatusCode::UNAUTHORIZED,
-                serde_json::to_value("Missing OpenAI API_KEY")?,
-            ));
+                Json(json!({"error": "Missing OpenAI API_KEY"})),
+            )
+                .into_response());
         }
     };
 
@@ -47,20 +56,20 @@ pub async fn openai_proxy(
 
     println!("Url: {:?}", &url.to_string());
 
-    let request = reqwest::Client::new()
+    let client = reqwest::Client::new();
+    let mut request = client
         .post(url)
         .header("Authorization", format!("Bearer {}", bearer_token))
         .json(&payload);
 
-    // Add headers to the request
-    //for (key, value) in headers.iter() {
-    //    if key.as_str().to_lowercase() != "host" {
-    //        request = request.header(key, value);
-    //    }
-    //}
+    // Check if the request is for streaming
+    let is_stream = payload["stream"].as_bool().unwrap_or(false);
+
+    if is_stream {
+        request = request.header(CONTENT_TYPE, "text/event-stream");
+    }
 
     println!("Request: {:?}", request);
-    //let response = request.send().await?;
     let response = request.send().await.map_err(|e| {
         println!("Error sending request: {:?}", e);
         e
@@ -75,9 +84,27 @@ pub async fn openai_proxy(
         );
         return Ok((
             StatusCode::OK,
-            serde_json::to_value(response.text().await?)?,
-        ));
+            Json(json!({"error": response.text().await?})),
+        )
+            .into_response());
     }
-    let response_body = response.json::<Value>().await?;
-    Ok((StatusCode::OK, serde_json::to_value(response_body)?))
+
+    if is_stream {
+        // Handle streaming response
+        let stream = response.bytes_stream().map(|result| match result {
+            Ok(bytes) => Ok(bytes),
+            Err(e) => Err(std::io::Error::new(std::io::ErrorKind::Other, e)),
+        });
+
+        Ok(Response::builder()
+            .status(StatusCode::OK)
+            .header(CONTENT_TYPE, "text/event-stream")
+            .body(Body::from_stream(stream))
+            .unwrap())
+    } else {
+        // Handle non-streaming response
+        let response_body = response.json::<Value>().await?;
+        Ok((StatusCode::OK, Json(response_body)).into_response())
+    }
 }
+

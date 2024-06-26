@@ -7,8 +7,9 @@ edition = "2021"
 anyhow = "1.0.86"
 async-openai = "0.23.2"
 async-trait = "0.1.80"
-axum = "0.7.4"
+axum = {version = "0.7.4", features = ["json", "macros", "multipart"] }
 axum-extra = { version = "0.9.3", features = ["typed-header"] }
+bytes = "1.6.0"
 chrono = "0.4.38"
 clickhouse = "0.11.6"
 derive_builder = "0.20.0"
