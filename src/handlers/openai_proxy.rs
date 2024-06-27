@@ -50,7 +50,7 @@ pub async fn openai_proxy(
 
     let bearer_token = match utils::extract_bearer_token(&headers) {
         Some(token) => token,
-        None => return { Ok(unauthorized_response()) },
+        None => return Ok(unauthorized_response()),
     };
 
     let proxy_instance = proxy_instance

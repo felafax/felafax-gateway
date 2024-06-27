@@ -21,20 +21,18 @@ use axum::{
 use chrono::Utc;
 use client::traits::*;
 use serde_json::{json, Value};
-use shuttle_runtime::SecretStore;
 use std::sync::Arc;
 use types::{OaiChatCompletionRequest, OaiChatCompletionResponse};
 use uuid::Uuid;
 
 #[derive(Clone)]
 pub struct BackendConfigs {
-    secrets: SecretStore,
     firebase: Arc<firestore::Firestore>,
     clickhouse: Arc<clickhouse::Clickhouse>,
 }
 
 async fn hello() -> &'static str {
-    "Hello from Felafax 🦊\nSupported routes: /v1/chat/completions"
+    "Hello from Felafax 🦊 Supported routes: /v1/chat/completions"
 }
 
 pub async fn translate_chat_completion(
@@ -76,13 +74,15 @@ pub async fn proxy(
     }
 }
 
-#[shuttle_runtime::main]
-async fn main(#[shuttle_runtime::Secrets] secrets: SecretStore) -> shuttle_axum::ShuttleAxum {
-    // firebase init
+#[tokio::main]
+async fn main() {
+    // Load environment variables
+    dotenv::dotenv().ok();
+
+    // Firebase init
     let firebase = firestore::Firestore::new(
-        &secrets
-            .get("FIREBASE_PROJECT_ID")
-            .unwrap_or_else(|| panic!("Error: FIREBASE_PROJECT_ID not found in secrets.")),
+        &std::env::var("FIREBASE_PROJECT_ID")
+            .expect("Error: FIREBASE_PROJECT_ID not found in environment."),
     );
     firebase
         .init()
@@ -91,19 +91,15 @@ async fn main(#[shuttle_runtime::Secrets] secrets: SecretStore) -> shuttle_axum:
 
     let firebase = Arc::new(firebase);
 
-    // init clickhouse
-    let click_house_url = secrets
-        .get("CLICKHOUSE_URL")
-        .unwrap_or_else(|| panic!("Error: CLICKHOUSE_URL not found in secrets."));
-    let clickhouse_username = secrets
-        .get("CLICKHOUSE_USERNAME")
-        .unwrap_or_else(|| panic!("Error: CLICKHOUSE_USER not found in secrets."));
-    let clickhouse_password = &secrets
-        .get("CLICKHOUSE_PASSWORD")
-        .unwrap_or_else(|| panic!("Error: CLICKHOUSE_PASSWORD not found in secrets."));
-    let clickhouse_database = secrets
-        .get("CLICKHOUSE_DATABASE")
-        .unwrap_or_else(|| panic!("Error: CLICKHOUSE_DATABASE not found in secrets."));
+    // Init clickhouse
+    let click_house_url =
+        std::env::var("CLICKHOUSE_URL").expect("Error: CLICKHOUSE_URL not found in environment.");
+    let clickhouse_username = std::env::var("CLICKHOUSE_USERNAME")
+        .expect("Error: CLICKHOUSE_USERNAME not found in environment.");
+    let clickhouse_password = std::env::var("CLICKHOUSE_PASSWORD")
+        .expect("Error: CLICKHOUSE_PASSWORD not found in environment.");
+    let clickhouse_database = std::env::var("CLICKHOUSE_DATABASE")
+        .expect("Error: CLICKHOUSE_DATABASE not found in environment.");
 
     let clickhouse_client = Arc::new(clickhouse::Clickhouse::new(
         &click_house_url,
@@ -113,7 +109,6 @@ async fn main(#[shuttle_runtime::Secrets] secrets: SecretStore) -> shuttle_axum:
     ));
 
     let backend_configs = BackendConfigs {
-        secrets,
         firebase,
         clickhouse: clickhouse_client,
     };
@@ -128,6 +123,14 @@ async fn main(#[shuttle_runtime::Secrets] secrets: SecretStore) -> shuttle_axum:
         .fallback(any(proxy))
         .with_state(backend_configs);
 
-    Ok(router.into())
+    // Run the server
+    //let addr = std::net::SocketAddr::from(([127, 0, 0, 1], 3000));
+    //println!("Listening on {}", addr);
+    //axum::Server::bind(&addr)
+    //    .serve(router.into_make_service())
+    //    .await
+    //    .unwrap();
+    println!("Listening on 0.0.0.0:8000");
+    let listener = tokio::net::TcpListener::bind("0.0.0.0:8000").await.unwrap();
+    axum::serve(listener, router).await.unwrap();
 }
-
