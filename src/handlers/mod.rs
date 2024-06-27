@@ -1,5 +1,5 @@
-pub mod proxy;
+pub mod openai_proxy;
 pub mod translate;
 
-pub use proxy::*;
+pub use openai_proxy::*;
 pub use translate::*;

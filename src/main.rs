@@ -60,7 +60,7 @@ pub async fn proxy(
     State(backend_configs): State<Arc<BackendConfigs>>,
     Json(payload): Json<Value>,
 ) -> impl IntoResponse {
-    let result = handlers::proxy::openai_proxy(
+    let result = handlers::openai_proxy::openai_proxy(
         method,
         headers,
         original_uri,
