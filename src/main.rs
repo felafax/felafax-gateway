@@ -26,6 +26,7 @@ use std::sync::Arc;
 use types::{OaiChatCompletionRequest, OaiChatCompletionResponse};
 use uuid::Uuid;
 
+#[derive(Clone)]
 pub struct BackendConfigs {
     secrets: SecretStore,
     firebase: Arc<firestore::Firestore>,
@@ -59,10 +60,14 @@ pub async fn proxy(
     State(backend_configs): State<Arc<BackendConfigs>>,
     Json(payload): Json<Value>,
 ) -> impl IntoResponse {
-    let mut proxy = handlers::proxy::Proxy::new(backend_configs.clone());
-    let result = proxy
-        .openai_proxy(method, headers, original_uri, payload)
-        .await;
+    let result = handlers::proxy::openai_proxy(
+        method,
+        headers,
+        original_uri,
+        payload,
+        backend_configs.clone(),
+    )
+    .await;
     if result.is_ok() {
         let response = result.unwrap();
         (StatusCode::OK, response).into_response()

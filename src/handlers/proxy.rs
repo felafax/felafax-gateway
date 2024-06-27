@@ -20,6 +20,7 @@ use axum::{
 };
 use bytes::Bytes;
 use chrono::Utc;
+use derive_builder::Builder;
 use futures::stream::StreamExt;
 use native_tls::TlsConnector as NativeTlsConnector;
 use reqwest::RequestBuilder;
@@ -31,139 +32,191 @@ use std::sync::Arc;
 use tokio::sync::mpsc;
 use uuid::Uuid;
 
-#[derive(Clone)]
+#[derive(Builder, Default)]
+#[builder(setter(into, strip_option), default)]
+#[builder(pattern = "mutable")]
 pub struct Proxy {
-    pub request: Option<Arc<reqwest::Request>>,
-    pub response_body: Option<Arc<Value>>,
-    pub backend_configs: Arc<BackendConfigs>,
+    pub payload: Option<Value>,
+    pub backend_configs: Option<Arc<BackendConfigs>>,
+    pub felafax_token: Option<String>,
+    pub headers: Option<HeaderMap>,
 }
 
-impl Proxy {
-    pub fn new(backend_configs: Arc<BackendConfigs>) -> Self {
-        Self {
-            request: None,
-            response_body: None,
-            backend_configs,
-        }
-    }
+impl Proxy {}
 
-    // takes care of safely setting request object and by cloning
-    async fn set_request(&mut self, request: &reqwest::Request) {
-        let request_clone = request.try_clone();
+pub async fn openai_proxy(
+    method: Method,
+    headers: HeaderMap,
+    original_uri: Uri,
+    payload: Value,
+    backend_configs: Arc<BackendConfigs>,
+) -> Result<Response> {
+    println!("OpenAI proxy request: {:?}", original_uri);
+    let mut proxy_instance = ProxyBuilder::default();
 
-        if let Some(request) = request_clone {
-            self.request = Some(Arc::new(request));
-        }
-    }
-
-    pub async fn openai_proxy(
-        &mut self,
-        method: Method,
-        headers: HeaderMap,
-        original_uri: Uri,
-        payload: Value,
-    ) -> Result<Response> {
-        println!("OpenAI proxy request: {:?}", original_uri);
-
-        let bearer_token = match utils::extract_bearer_token(&headers) {
-            Some(token) => token,
-            None => {
-                return Ok((
-                    StatusCode::UNAUTHORIZED,
-                    Json(json!({"error": "Missing OpenAI API_KEY"})),
-                )
-                    .into_response());
-            }
-        };
-
-        // construct url
-        let url = url::Url::parse("https://api.openai.com/")?;
-        let url = url.join(&original_uri.to_string())?;
-
-        println!("Url: {:?}", &url.to_string());
-
-        let client = reqwest::Client::new();
-        let request = match method {
-            Method::GET => client.get(url),
-            Method::POST => client.post(url),
-            Method::PUT => client.put(url),
-            Method::DELETE => client.delete(url),
-            _ => {
-                return Ok((
-                    StatusCode::METHOD_NOT_ALLOWED,
-                    Json(json!({"error": "Method not allowed"})),
-                )
-                    .into_response());
-            }
-        };
-
-        let mut request = request
-            .header("Authorization", format!("Bearer {}", bearer_token))
-            .json(&payload);
-
-        // Check if the request is for streaming
-        let is_stream = payload["stream"].as_bool().unwrap_or(false);
-
-        if is_stream {
-            request = request.header(CONTENT_TYPE, "text/event-stream");
-        }
-
-        let request = request.build()?;
-        self.set_request(&request).await;
-
-        println!("Request: {:?}", request);
-        let response = client.execute(request).await.map_err(|e| {
-            println!("Error sending request: {:?}", e);
-            e
-        })?;
-
-        println!("Response: {:?}", response);
-
-        if !response.status().is_success() {
-            tracing::error!(
-                status = response.status().as_u16(),
-                "Failed to make completion request to OpenAI"
-            );
+    let bearer_token = match utils::extract_bearer_token(&headers) {
+        Some(token) => token,
+        None => {
             return Ok((
-                StatusCode::OK,
-                Json(json!({"error": response.text().await?})),
+                StatusCode::UNAUTHORIZED,
+                Json(json!({"error": "Missing OpenAI API_KEY"})),
             )
                 .into_response());
         }
+    };
 
-        if is_stream {
-            let (tx, rx): (mpsc::Sender<Bytes>, mpsc::Receiver<Bytes>) = mpsc::channel(100);
-            // Handle streaming response
-            let stream = response.bytes_stream().map(move |result| match result {
-                Ok(bytes) => {
-                    // clone and send bytes for background processing
-                    let bytes_clone = Bytes::copy_from_slice(&bytes);
-                    let _ = tx.try_send(bytes_clone).map_err(|e| {
-                        println!("Error sending bytes: {:?}", e);
-                    });
+    // setup proxy instance
+    proxy_instance.felafax_token(&bearer_token);
+    proxy_instance.payload(payload.clone());
+    proxy_instance.backend_configs(backend_configs);
+    proxy_instance.headers(headers);
 
-                    Ok(bytes)
-                }
-                Err(e) => Err(std::io::Error::new(std::io::ErrorKind::Other, e)),
-            });
+    // construct url
+    let url = url::Url::parse("https://api.openai.com/")?;
+    let url = url.join(&original_uri.to_string())?;
 
-            // Spawn the background processing task
-            tokio::spawn(process_background_streaming(self.clone(), rx));
+    println!("Url: {:?}", &url.to_string());
 
-            Ok(Response::builder()
-                .status(StatusCode::OK)
-                .header(CONTENT_TYPE, "text/event-stream")
-                .body(Body::from_stream(stream))
-                .unwrap())
-        } else {
-            // Handle non-streaming response
-            let response_body = response.json::<Value>().await?;
-
-            // clone response body for background processing
-            self.response_body = Some(Arc::new(response_body.clone()));
-
-            Ok((StatusCode::OK, Json(response_body)).into_response())
+    let client = reqwest::Client::new();
+    let request = match method {
+        Method::GET => client.get(url),
+        Method::POST => client.post(url),
+        Method::PUT => client.put(url),
+        Method::DELETE => client.delete(url),
+        _ => {
+            return Ok((
+                StatusCode::METHOD_NOT_ALLOWED,
+                Json(json!({"error": "Method not allowed"})),
+            )
+                .into_response());
         }
+    };
+
+    let mut request = request
+        .header("Authorization", format!("Bearer {}", bearer_token))
+        .json(&payload);
+
+    // Check if the request is for streaming
+    let is_stream = payload["stream"].as_bool().unwrap_or(false);
+
+    if is_stream {
+        request = request.header(CONTENT_TYPE, "text/event-stream");
+    }
+
+    let request = request.build()?;
+
+    println!("Request: {:?}", request);
+    let response = client.execute(request).await.map_err(|e| {
+        println!("Error sending request: {:?}", e);
+        e
+    })?;
+
+    println!("Response: {:?}", response);
+
+    if !response.status().is_success() {
+        tracing::error!(
+            status = response.status().as_u16(),
+            "Failed to make completion request to OpenAI"
+        );
+        return Ok((
+            StatusCode::OK,
+            Json(json!({"error": response.text().await?})),
+        )
+            .into_response());
+    }
+
+    if is_stream {
+        let (tx, rx): (mpsc::Sender<Bytes>, mpsc::Receiver<Bytes>) = mpsc::channel(100);
+        // Handle streaming response
+        let stream = response.bytes_stream().map(move |result| match result {
+            Ok(bytes) => {
+                // clone and send bytes for background processing
+                let bytes_clone = Bytes::copy_from_slice(&bytes);
+                let _ = tx.try_send(bytes_clone).map_err(|e| {
+                    println!("Error sending bytes: {:?}", e);
+                });
+
+                Ok(bytes)
+            }
+            Err(e) => Err(std::io::Error::new(std::io::ErrorKind::Other, e)),
+        });
+
+        // Spawn the background processing task
+        // TODO: handle unwrap errors here
+        let proxy_instance = proxy_instance.build().unwrap();
+        tokio::spawn(process_background_streaming(proxy_instance, rx));
+
+        Ok(Response::builder()
+            .status(StatusCode::OK)
+            .header(CONTENT_TYPE, "text/event-stream")
+            .body(Body::from_stream(stream))
+            .unwrap())
+    } else {
+        // Handle non-streaming response
+        let response_body = response.json::<Value>().await?;
+
+        // clone response body for background processing
+        let proxy_instance = proxy_instance.build().unwrap();
+        tokio::spawn(process_background(proxy_instance, response_body.clone()));
+
+        Ok((StatusCode::OK, Json(response_body)).into_response())
+    }
+}
+
+async fn log_stats(
+    proxy: Proxy,
+    response: Option<String>,
+    usage: Option<Usage>,
+    error: Option<String>,
+) {
+    let mut request_logs = request_logs::RequestLogBuilder::default();
+    request_logs.id(Uuid::new_v4().to_string());
+    request_logs.timestamp(Utc::now().timestamp());
+
+    if let Some(token) = proxy.felafax_token {
+        request_logs.customer_id(token);
+    }
+
+    if let Some(request) = proxy.payload {
+        request_logs.request(request.to_string());
+    }
+
+    if let Some(response) = response {
+        request_logs.response(response);
+    }
+    if let Some(usage) = usage {
+        request_logs.prompt_tokens(usage.prompt_tokens);
+        request_logs.completion_tokens(usage.completion_tokens);
+        request_logs.total_tokens(usage.total_tokens);
+    }
+
+    //request_logs.total_latency(0);
+    if let Some(error) = error {
+        request_logs.error(error);
+    }
+
+    let request_logs = request_logs.build().unwrap();
+    if let Some(backend_configs) = &proxy.backend_configs {
+        let clickhouse_client = backend_configs.clickhouse.clone();
+        let firebase_client = backend_configs.firebase.clone();
+        request_logs
+            .log(&clickhouse_client, &firebase_client)
+            .await
+            .unwrap_or_else(|e| eprintln!("Failed to log request: {:?}", e));
+    }
+}
+
+async fn process_background(proxy_instance: Proxy, response_body: Value) {
+    // Process the response body
+    if let Ok(response) = serde_json::from_value::<OpenAIResponse<ChoiceMessage>>(response_body) {
+        println!("Processed message: {:?}", response);
+        let response_str = serde_json::to_string(&response).unwrap();
+        let usage = response.usage;
+        tokio::spawn(async move {
+            log_stats(proxy_instance, Some(response_str), usage, None).await;
+        });
+    } else {
+        println!("Failed to parse message");
     }
 }
 
@@ -217,12 +270,40 @@ async fn process_background_streaming(proxy_instance: Proxy, mut rx: mpsc::Recei
     // Process any remaining data in the buffer
     if !buffer.is_empty() {
         if let Some(response) = process_message(&buffer) {
-            // Handle final message (similar to the loop above)
-            // ...
+            println!("Final message: {:?}", response);
+
+            // Accumulate the response
+            if accumulated_response.id.is_empty() {
+                accumulated_response.id = response.id;
+                accumulated_response.object = response.object;
+                accumulated_response.model = response.model;
+            }
+
+            // Accumulate choices
+            for choice in response.choices {
+                if let Some(content) = choice.delta.content {
+                    accumulated_content.push_str(&content);
+                }
+                if choice.finish_reason.is_some() {
+                    accumulated_response.choices.push(CompletionChoiceResponse {
+                        delta: CompletionDeltaResponse {
+                            role: Some("assistant".to_string()),
+                            content: Some(accumulated_content.clone()),
+                        },
+                        finish_reason: choice.finish_reason,
+                    });
+                }
+            }
+
+            // Update usage if available
+            if let Some(usage) = response.usage {
+                accumulated_response.usage = Some(usage);
+            }
         }
     }
 
     // Construct the final full JSON
+    let usage = accumulated_response.usage.clone();
     let final_json = serde_json::to_value(accumulated_response).unwrap();
     println!(
         "Final accumulated JSON: {}",
@@ -230,6 +311,10 @@ async fn process_background_streaming(proxy_instance: Proxy, mut rx: mpsc::Recei
     );
 
     // Here you can do something with the final_json, like storing it or sending it somewhere
+    let response_str = serde_json::to_string(&final_json).unwrap();
+    tokio::spawn(async move {
+        log_stats(proxy_instance, Some(response_str), usage, None).await;
+    });
 }
 
 fn process_message(message: &str) -> Option<OpenAIResponse<CompletionChoiceResponse>> {
@@ -246,6 +331,13 @@ fn process_message(message: &str) -> Option<OpenAIResponse<CompletionChoiceRespo
         }
     }
     None
+}
+// Request
+#[derive(Default, Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+struct CompletionRequest {
+    model: String,
+    messages: Vec<Message>,
+    stream: bool,
 }
 
 // for stream choices has delta and for non-stream it is a vec of messages
