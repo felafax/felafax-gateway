@@ -59,9 +59,10 @@ pub async fn proxy(
     State(backend_configs): State<Arc<BackendConfigs>>,
     Json(payload): Json<Value>,
 ) -> impl IntoResponse {
-    let result =
-        handlers::proxy::openai_proxy(method, headers, original_uri, backend_configs, payload)
-            .await;
+    let mut proxy = handlers::proxy::Proxy::new(backend_configs.clone());
+    let result = proxy
+        .openai_proxy(method, headers, original_uri, payload)
+        .await;
     if result.is_ok() {
         let response = result.unwrap();
         (StatusCode::OK, response).into_response()

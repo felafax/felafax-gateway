@@ -28,12 +28,22 @@ print(completion.choices[0].message.content)
 
 # Streaming:
 print("----- streaming request -----")
+# stream = client.chat.completions.create(
+#     model="gpt-4o",
+#     messages=[
+#         {
+#             "role": "user",
+#             "content": "How do I output all files in a directory using Python?",
+#         },
+#     ],
+#     stream=True,
+# )
 stream = client.chat.completions.create(
     model="gpt-4o",
     messages=[
         {
             "role": "user",
-            "content": "How do I output all files in a directory using Python?",
+            "content": "Tell me a joke",
         },
     ],
     stream=True,
