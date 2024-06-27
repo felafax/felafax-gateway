@@ -45,13 +45,15 @@ pub async fn openai_proxy(
     backend_configs: Arc<BackendConfigs>,
 ) -> Result<Response> {
     println!("OpenAI proxy request: {:?}", original_uri);
+    let mut proxy_instance = ProxyBuilder::default();
+    proxy_instance.request(payload.clone());
 
     let bearer_token = match utils::extract_bearer_token(&headers) {
         Some(token) => token,
-        None => return Ok(unauthorized_response()),
+        None => return { Ok(unauthorized_response()) },
     };
 
-    let mut proxy_instance = ProxyBuilder::default()
+    let proxy_instance = proxy_instance
         .bearer_token(&bearer_token)
         .request(payload.clone())
         .backend_configs(backend_configs)
@@ -169,34 +171,37 @@ async fn log_stats(
     usage: Option<Usage>,
     error: Option<String>,
 ) {
-    let mut request_logs = request_logs::RequestLogBuilder::default();
-    let request_logs = request_logs
-        .id(Uuid::new_v4().to_string())
-        .timestamp(Utc::now().timestamp())
-        .customer_id(proxy.bearer_token.unwrap_or_default())
-        .request(proxy.request.map(|r| r.to_string()).unwrap_or_default())
-        .response(response.unwrap_or_default());
+    // run this in the background
+    tokio::spawn(async move {
+        let mut request_logs = request_logs::RequestLogBuilder::default();
+        let request_logs = request_logs
+            .id(Uuid::new_v4().to_string())
+            .timestamp(Utc::now().timestamp())
+            .customer_id(proxy.bearer_token.unwrap_or_default())
+            .request(proxy.request.map(|r| r.to_string()).unwrap_or_default())
+            .response(response.unwrap_or_default());
 
-    if let Some(usage) = usage {
-        request_logs
-            .prompt_tokens(usage.prompt_tokens)
-            .completion_tokens(usage.completion_tokens)
-            .total_tokens(usage.total_tokens);
-    }
+        if let Some(usage) = usage {
+            request_logs
+                .prompt_tokens(usage.prompt_tokens)
+                .completion_tokens(usage.completion_tokens)
+                .total_tokens(usage.total_tokens);
+        }
 
-    if let Some(error) = error {
-        request_logs.error(error);
-    }
+        if let Some(error) = error {
+            request_logs.error(error);
+        }
 
-    let request_logs = request_logs.build().unwrap();
-    if let Some(backend_configs) = &proxy.backend_configs {
-        let clickhouse_client = backend_configs.clickhouse.clone();
-        let firebase_client = backend_configs.firebase.clone();
-        request_logs
-            .log(&clickhouse_client, &firebase_client)
-            .await
-            .unwrap_or_else(|e| eprintln!("Failed to log request: {:?}", e));
-    }
+        let request_logs = request_logs.build().unwrap();
+        if let Some(backend_configs) = &proxy.backend_configs {
+            let clickhouse_client = backend_configs.clickhouse.clone();
+            let firebase_client = backend_configs.firebase.clone();
+            request_logs
+                .log(&clickhouse_client, &firebase_client)
+                .await
+                .unwrap_or_else(|e| eprintln!("Failed to log request: {:?}", e));
+        }
+    });
 }
 
 async fn process_background(proxy_instance: Proxy, response_body: Value) {

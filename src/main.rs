@@ -130,3 +130,4 @@ async fn main(#[shuttle_runtime::Secrets] secrets: SecretStore) -> shuttle_axum:
 
     Ok(router.into())
 }
+
