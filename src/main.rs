@@ -132,7 +132,10 @@ async fn main() {
     //    .serve(router.into_make_service())
     //    .await
     //    .unwrap();
-    println!("Listening on 0.0.0.0:8000");
-    let listener = tokio::net::TcpListener::bind("0.0.0.0:8000").await.unwrap();
+    let port = std::env::var("PORT").unwrap_or_else(|_| "8000".to_string());
+    println!("Listening on {}", port);
+    let listener = tokio::net::TcpListener::bind(format!("0.0.0.0:{}", port))
+        .await
+        .unwrap();
     axum::serve(listener, router).await.unwrap();
 }
