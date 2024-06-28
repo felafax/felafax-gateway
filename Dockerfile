@@ -1,6 +1,10 @@
 # Use the official Rust image as a parent image
 FROM rust:1.76-slim-bullseye as builder
 
+EXPOSE 8080
+
+ENV PORT 8080
+
 # Install build dependencies
 RUN apt-get update && \
     apt-get install -y pkg-config libssl-dev build-essential g++ && \
@@ -35,6 +39,8 @@ RUN ls -l /usr/local/bin/felafax-proxy && \
 
 # Copy the .env file
 COPY .env .
+
+COPY firebase.json /firebase.json
 
 # Set the startup command
 CMD ["felafax-proxy"]
