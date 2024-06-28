@@ -80,11 +80,16 @@ async fn main() {
     dotenv::dotenv().ok();
 
     // Firebase init
+    let firebase_key = std::env::var("FIREBASE_SERVICE_ACCOUNT_KEY").unwrap_or_else(|_| {
+        std::env::var("GOOGLE_APPLICATION_CREDENTIALS").unwrap_or_else(|_| {
+            panic!("Error: FIREBASE_SERVICE_ACCOUNT_KEY or GOOGLE_APPLICATION_CREDENTIALS not found in environment.")
+        })
+    });
+
     let firebase = firestore::Firestore::new(
         &std::env::var("FIREBASE_PROJECT_ID")
             .expect("Error: FIREBASE_PROJECT_ID not found in environment."),
-        &std::env::var("FIREBASE_SERVICE_ACCOUNT_KEY")
-            .expect("Error: FIREBASE_SERVICE_ACCOUNT_KEY not found in environment."),
+        &firebase_key,
     );
     firebase
         .init()

@@ -8,9 +8,10 @@ client = OpenAI(
 
     # default is https://api.openai.com/v1/
     # base url for testing locally
-    base_url="http://127.0.0.1:8000/v1/"
+    # base_url="http://127.0.0.1:8000/v1/"
     # base url for production instance
     # base_url = "https://felafax-proxy.shuttleapp.rs/v1/"
+    base_url = "https://felafax-proxy-sq5shdnepa-uc.a.run.app/v1/"
 
 )
 
