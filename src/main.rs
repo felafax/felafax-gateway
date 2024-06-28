@@ -2,7 +2,7 @@
 #![allow(dead_code)]
 #![allow(unused_imports)]
 #![allow(async_fn_in_trait)]
-// #![allow(deprecated)]
+#![allow(deprecated)]
 
 pub mod clickhouse;
 pub mod client;

@@ -39,6 +39,14 @@ completion = client.chat.completions.create(
 print(completion.choices[0].message.content)
 ```
 
+# Run
+```sh
+# docker build
+docker build -t felafax-proxy .
+# docker run
+docker run -p 8080:8080 -v $(pwd)/firebase.json:/firebase.json felafax-proxy
+```
+
 # Supported Features
 
 ### Supported LLMs
@@ -54,4 +62,5 @@ We support `/chat/completions` for each of these LLMs.
 - [ ] Request stats logging
 - [ ] Routing logs to S3 or other storage connectors (Splunk)
 - [ ] Monitoring & observability
+
 
