@@ -83,6 +83,8 @@ async fn main() {
     let firebase = firestore::Firestore::new(
         &std::env::var("FIREBASE_PROJECT_ID")
             .expect("Error: FIREBASE_PROJECT_ID not found in environment."),
+        &std::env::var("FIREBASE_SERVICE_ACCOUNT_KEY")
+            .expect("Error: FIREBASE_SERVICE_ACCOUNT_KEY not found in environment."),
     );
     firebase
         .init()

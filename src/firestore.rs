@@ -9,6 +9,7 @@ const METADTA_COLLECTION_NAME: &'static str = "configs";
 
 pub struct Firestore {
     project_id: String,
+    service_account_key_file: String,
     db: OnceCell<FirestoreDb>,
 }
 
@@ -25,9 +26,14 @@ pub struct CustomerConfig {
 }
 
 impl Firestore {
-    pub fn new(project_id: &str) -> Self {
+    pub fn new(project_id: &str, service_account_key_file: &str) -> Self {
+        // check if service_account_key_file exists
+        if !std::path::Path::new(service_account_key_file).exists() {
+            panic!("Service account key file does not exist");
+        }
         Self {
             project_id: project_id.to_string(),
+            service_account_key_file: service_account_key_file.to_string(),
             db: OnceCell::new(),
         }
     }
