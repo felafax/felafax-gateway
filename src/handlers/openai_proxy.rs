@@ -23,7 +23,9 @@ use uuid::Uuid;
 use crate::{
     clickhouse,
     client::traits::*,
-    firestore, request_logs,
+    firestore,
+    handlers::experiment,
+    request_logs,
     types::{OaiChatCompletionRequest, OaiChatCompletionResponse},
     utils, BackendConfigs,
 };
@@ -53,6 +55,19 @@ pub async fn openai_proxy(
         None => return Ok(unauthorized_response()),
     };
 
+    // experimentation override
+    let mut payload = payload;
+    let experiment = experiment::Experiment::new(backend_configs.clone());
+    match experiment.override_payload(payload.clone(), headers.clone(), &bearer_token) {
+        Ok(new_payload) => {
+            payload = new_payload;
+        }
+        Err(e) => {
+            eprintln!("Error overriding payload  {:?}", e);
+        }
+    }
+
+    // construct logging object
     let proxy_instance = proxy_instance
         .bearer_token(&bearer_token)
         .request(payload.clone())
@@ -310,10 +325,11 @@ fn accumulate_response(
 }
 
 #[derive(Default, Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-struct CompletionRequest {
-    model: String,
-    messages: Vec<Message>,
-    stream: bool,
+#[serde(default)]
+pub struct CompletionRequest {
+    pub model: String,
+    pub messages: Vec<Message>,
+    pub stream: bool,
 }
 
 #[derive(Debug, Deserialize, Clone, PartialEq, Serialize, Default)]
@@ -327,12 +343,14 @@ pub struct OpenAIResponse<T> {
 }
 
 #[derive(Default, Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
 pub struct CompletionDeltaResponse {
     content: Option<String>,
     pub role: Option<String>,
 }
 
 #[derive(Default, Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
 pub struct CompletionChoiceResponse {
     delta: CompletionDeltaResponse,
     finish_reason: Option<String>,
