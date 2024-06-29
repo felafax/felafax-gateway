@@ -1,9 +1,8 @@
 use anyhow::Result;
 use axum::{
     body::Body,
-    extract::State,
     http::{
-        header::{HeaderMap, AUTHORIZATION, CONTENT_TYPE},
+        header::{HeaderMap, CONTENT_TYPE},
         Method, StatusCode, Uri,
     },
     response::{IntoResponse, Response},
@@ -21,12 +20,8 @@ use tokio::sync::mpsc;
 use uuid::Uuid;
 
 use crate::{
-    clickhouse,
-    client::traits::*,
-    firestore,
     handlers::experiment,
     request_logs,
-    types::{OaiChatCompletionRequest, OaiChatCompletionResponse},
     utils, BackendConfigs,
 };
 

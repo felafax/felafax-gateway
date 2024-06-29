@@ -1,6 +1,6 @@
 #![allow(unused_variables)]
 #![allow(dead_code)]
-#![allow(unused_imports)]
+//#![allow(unused_imports)]
 #![allow(async_fn_in_trait)]
 #![allow(deprecated)]
 
@@ -14,16 +14,11 @@ pub mod types;
 pub mod utils;
 
 use axum::{
-    extract::OriginalUri, extract::State, http::header::HeaderMap, http::header::AUTHORIZATION,
-    http::Method, http::StatusCode, response::IntoResponse, routing::any, routing::get,
-    routing::post, Json, Router,
+    extract::OriginalUri, extract::State, http::header::HeaderMap, http::Method, http::StatusCode,
+    response::IntoResponse, routing::any, routing::get, routing::post, Json, Router,
 };
-use chrono::Utc;
-use client::traits::*;
 use serde_json::{json, Value};
 use std::sync::Arc;
-use types::{OaiChatCompletionRequest, OaiChatCompletionResponse};
-use uuid::Uuid;
 
 #[derive(Clone)]
 pub struct BackendConfigs {

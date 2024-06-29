@@ -3,12 +3,10 @@ use crate::types::LLMConfig;
 use crate::types::*;
 use anyhow::bail;
 use anyhow::Result;
-use derive_builder::Builder;
 use serde::Deserialize;
 use serde::Serialize;
 use serde_json::Value;
 use std::time::{SystemTime, UNIX_EPOCH};
-use tokio_util::io::StreamReader;
 use uuid::Uuid;
 
 fn convert_err(err: reqwest::Error) -> std::io::Error {

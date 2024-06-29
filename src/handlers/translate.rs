@@ -8,12 +8,10 @@ use crate::utils;
 use crate::BackendConfigs;
 use anyhow::Result;
 use axum::{
-    extract::State, http::header::HeaderMap, http::header::AUTHORIZATION, http::StatusCode,
-    response::IntoResponse, routing::get, routing::post, Json, Router,
+    http::header::HeaderMap, http::StatusCode,
 };
 use chrono::Utc;
 use serde_json::{json, Value};
-use shuttle_runtime::SecretStore;
 use std::sync::Arc;
 use uuid::Uuid;
 

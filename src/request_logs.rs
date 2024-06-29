@@ -6,7 +6,6 @@ use derive_builder::Builder;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
-use uuid::Uuid;
 
 #[derive(Debug, Builder, Deserialize, Clone, PartialEq, Serialize, Row, Default)]
 #[builder(setter(into, strip_option), default)]

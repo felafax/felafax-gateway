@@ -1,5 +1,5 @@
 use crate::request_logs;
-use anyhow::{anyhow, Result};
+use anyhow::{Result};
 use firestore::*;
 use once_cell::sync::OnceCell;
 use serde::{Deserialize, Serialize};

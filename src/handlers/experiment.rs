@@ -2,14 +2,9 @@ use crate::handlers::openai_proxy::*;
 use crate::BackendConfigs;
 use anyhow::Result;
 use axum::{
-    body::Body,
-    extract::State,
     http::{
-        header::{HeaderMap, AUTHORIZATION, CONTENT_TYPE},
-        Method, StatusCode, Uri,
+        header::{HeaderMap},
     },
-    response::{IntoResponse, Response},
-    Json,
 };
 use serde::Deserialize;
 use serde_json;

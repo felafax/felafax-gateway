@@ -1,6 +1,4 @@
-use async_openai::types::{self, *};
 use derive_builder::Builder;
-use futures::Stream;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
