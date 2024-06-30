@@ -7,9 +7,7 @@ use crate::types::{OaiChatCompletionRequest, OaiChatCompletionResponse};
 use crate::utils;
 use crate::BackendConfigs;
 use anyhow::Result;
-use axum::{
-    http::header::HeaderMap, http::StatusCode,
-};
+use axum::{http::header::HeaderMap, http::StatusCode};
 use chrono::Utc;
 use serde_json::{json, Value};
 use std::sync::Arc;
@@ -28,7 +26,8 @@ async fn log_stats(
 ) -> Result<()> {
     let clickhouse_client = clickhouse_client.clone();
     let mut request_logs = request_logs::RequestLogBuilder::default();
-    request_logs.id(Uuid::new_v4().to_string());
+    request_logs.customer_id(Uuid::new_v4().to_string());
+    request_logs.request_id(Uuid::new_v4().to_string());
     request_logs.timestamp(Utc::now().timestamp());
 
     request_logs.customer_id(felafax_token);

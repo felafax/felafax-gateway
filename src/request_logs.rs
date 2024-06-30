@@ -13,11 +13,13 @@ use std::sync::Arc;
 #[builder(derive(Debug))]
 #[serde(default)]
 pub struct RequestLog {
-    pub id: String,
+    pub request_id: String,
+
+    pub customer_id: String,
 
     pub timestamp: i64,
 
-    pub customer_id: String,
+    pub felafax_token: String,
 
     #[serde(skip_serializing_if = "Option::is_none")]
     pub llm_name: Option<String>,
@@ -58,7 +60,12 @@ impl RequestLog {
     ) -> Result<()> {
         println!("Logging request: {:?}", self);
         // TODO: move ot clickhouse or postgres
-        //client.insert_row("request_logs", self.clone()).await?;
+        // client.insert_row("request_logs", self.clone()).await?;
+
+        if self.customer_id.is_empty() {
+            eprintln!("Customer ID is empty, skipping logging");
+        }
+
         firestore
             .insert_request_log(&self.clone())
             .await

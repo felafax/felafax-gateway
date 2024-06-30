@@ -77,7 +77,7 @@ impl Experiment {
         rng.gen_bool(probability / 100.0)
     }
 
-    fn extract_felafax_proxy(&self, headers: &HeaderMap) -> Result<Option<FelafaxProxy>> {
+    pub fn extract_felafax_proxy(&self, headers: &HeaderMap) -> Result<Option<FelafaxProxy>> {
         headers
             .get("felafax_proxy")
             .map(|header| {

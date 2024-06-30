@@ -28,6 +28,7 @@ pub struct Proxy {
     backend_configs: Option<Arc<BackendConfigs>>,
     bearer_token: Option<String>,
     headers: Option<HeaderMap>,
+    felafax_token: Option<String>,
 }
 
 pub async fn openai_proxy(
@@ -46,9 +47,22 @@ pub async fn openai_proxy(
         None => return Ok(unauthorized_response()),
     };
 
-    // experimentation override
     let mut payload = payload;
     let experiment = experiment::Experiment::new(backend_configs.clone());
+    let felafax_proxy = experiment.extract_felafax_proxy(&headers);
+
+    match felafax_proxy {
+        Ok(Some(felafax_proxy)) => {
+            proxy_instance.felafax_token(felafax_proxy.felafax_token.unwrap_or_default());
+        }
+        Ok(None) => {
+            // user is not authorised to use proxy if felafax_token is missing.
+            // TODO: handle rejecting request
+        }
+        Err(e) => eprintln!("Error extracting felafax proxy: {:?}", e),
+    };
+
+    // rollout override
     match experiment
         .override_payload(payload.clone(), &headers.clone())
         .await
@@ -184,9 +198,9 @@ async fn log_stats(
     tokio::spawn(async move {
         let mut request_logs = request_logs::RequestLogBuilder::default();
         let request_logs = request_logs
-            .id(Uuid::new_v4().to_string())
             .timestamp(Utc::now().timestamp())
-            .customer_id(proxy.bearer_token.unwrap_or_default())
+            .request_id(Uuid::new_v4().to_string())
+            .customer_id(proxy.felafax_token.unwrap_or_default())
             .request(proxy.request.map(|r| r.to_string()).unwrap_or_default())
             .response(response.unwrap_or_default());
 

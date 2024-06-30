@@ -212,14 +212,20 @@ impl Firestore {
     }
 
     pub async fn insert_request_log(&self, request_logs: &request_logs::RequestLog) -> Result<()> {
-        self.get_client()
-            .fluent()
+        let db = self.get_client();
+
+        // Create a reference to the customer's document
+        let customer_doc_ref = db.parent_path("request_logs", &request_logs.customer_id)?;
+
+        db.fluent()
             .insert()
-            .into("request_logs")
-            .document_id(&request_logs.id)
+            .into("request_logs") // This is now the name of the subcollection
+            .document_id(&request_logs.request_id)
+            .parent(&customer_doc_ref)
             .object(request_logs)
             .execute()
             .await?;
+
         Ok(())
     }
 }
