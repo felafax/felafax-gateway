@@ -19,11 +19,7 @@ use std::sync::Arc;
 use tokio::sync::mpsc;
 use uuid::Uuid;
 
-use crate::{
-    handlers::experiment,
-    request_logs,
-    utils, BackendConfigs,
-};
+use crate::{handlers::experiment, request_logs, utils, BackendConfigs};
 
 #[derive(Builder, Default)]
 #[builder(setter(into, strip_option), default)]
@@ -53,7 +49,10 @@ pub async fn openai_proxy(
     // experimentation override
     let mut payload = payload;
     let experiment = experiment::Experiment::new(backend_configs.clone());
-    match experiment.override_payload(payload.clone(), headers.clone(), &bearer_token) {
+    match experiment
+        .override_payload(payload.clone(), &headers.clone())
+        .await
+    {
         Ok(new_payload) => {
             payload = new_payload;
         }

@@ -33,9 +33,16 @@ pub struct FelafaxTokenToIdMap {
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
-struct Rollout {
-    pub id: String,
-    pub roll_out_percentage: Option<i64>,
+pub struct Rollout {
+    pub rollout_id: String,
+    pub rollout_name: String,
+    pub rollout_percentage: f64,
+    pub created_date: i64,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct UserRollouts {
+    pub rollouts: Vec<Rollout>,
 }
 
 impl Firestore {
@@ -58,12 +65,88 @@ impl Firestore {
         self.project_id.clone()
     }
 
-    pub async fn get_roll_out_percentage(&self, rollout_id: &str) -> Result<Option<i64>> {
+    pub async fn get_roll_out_percentage(
+        &self,
+        user_id: &str,
+        rollout_id: &str,
+    ) -> Result<Option<i64>> {
+        let rollouts = self.fetch_user_rollouts(user_id).await?;
+        println!("ROLLOUTS: {:?}", rollouts);
+        for rollout in rollouts {
+            if rollout.rollout_id == rollout_id {
+                return Ok(Some(rollout.rollout_percentage as i64));
+            }
+        }
         Ok(None)
     }
 
+    async fn fetch_user_rollouts(&self, user_id: &str) -> Result<Vec<Rollout>> {
+        let user_rollouts: Option<UserRollouts> = self
+            .get_client()
+            .fluent()
+            .select()
+            .by_id_in("rollouts")
+            .obj()
+            .one(user_id)
+            .await?;
+
+        // 2. Extract rollouts or return an empty vector if not found
+        match user_rollouts {
+            Some(ur) => Ok(ur.rollouts),
+            None => Ok(Vec::new()),
+        }
+    }
+
+    //pub async fn get_roll_outs(&self, user_id: &str) -> Result<Vec<Rollout>> {
+    //    const ROLLOUT_COLLECTION_NAME: &str = "rollouts";
+    //    const USER_ROLLOUTS_COLLECTION_NAME: &str = "userRollouts";
+    //
+    //    let client = self.get_client();
+    //
+    //    // Construct the path for the user's rollout reference
+    //    let user_rollout_ref = format!("{}/{}", ROLLOUT_COLLECTION_NAME, user_id);
+    //    println!("USER_ROLLOUT_REF: {:?}", user_rollout_ref);
+    //
+    //    // Fetch the list of rollout IDs
+    //    let rollout_docs = client
+    //        .fluent()
+    //        .select()
+    //        .from(USER_ROLLOUTS_COLLECTION_NAME)
+    //        .parent(&user_rollout_ref)
+    //        .query()
+    //        .await?;
+    //
+    //    println!("ROLLOUT_DOCS: {:?}", rollout_docs);
+    //
+    //    let rollout_ids: Vec<String> = rollout_docs
+    //        .into_iter()
+    //        .map(|doc| doc.name.to_string())
+    //        .collect();
+    //
+    //    println!("ROLLOUT_IDS: {:?}", rollout_ids);
+    //
+    //    // Fetch details for each rollout
+    //    let mut rollouts = Vec::new();
+    //    for rollout_id in rollout_ids {
+    //        if let Some(rollout_doc) = client
+    //            .fluent()
+    //            .select()
+    //            .by_id_in(USER_ROLLOUTS_COLLECTION_NAME)
+    //            .parent(&user_rollout_ref)
+    //            .obj::<Rollout>()
+    //            .one(&rollout_id)
+    //            .await?
+    //        {
+    //            rollouts.push(rollout_doc);
+    //        }
+    //    }
+    //
+    //    Ok(rollouts)
+    //}
+
     pub async fn get_user_id(&self, felafax_token: &str) -> Result<Option<String>> {
         let id_to_user_map = self.get_id_to_user_map().await?;
+        println!("ID_TO_USER_MAP: {:?}", id_to_user_map);
         match id_to_user_map {
             Some(doc) => {
                 if doc.felafax_token_to_id_map.contains_key(felafax_token) {

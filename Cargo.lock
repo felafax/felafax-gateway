@@ -713,6 +713,7 @@ dependencies = [
  "headers",
  "native-tls",
  "once_cell",
+ "rand",
  "reqwest 0.12.4",
  "serde",
  "serde_json",
