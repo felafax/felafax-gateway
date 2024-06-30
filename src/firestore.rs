@@ -1,11 +1,13 @@
 use crate::request_logs;
-use anyhow::{Result};
+use anyhow::Result;
 use firestore::*;
+use futures::StreamExt;
 use once_cell::sync::OnceCell;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
 const METADTA_COLLECTION_NAME: &'static str = "configs";
+const CUSTOMER_COLLECTION_NAME: &'static str = "users";
 
 pub struct Firestore {
     project_id: String,
@@ -23,6 +25,17 @@ pub struct CustomerConfig {
     pub selected_llm_name: String,
     pub selected_llm_model: String,
     pub llm_configs: HashMap<String, CustomerLLMConfig>,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct FelafaxTokenToIdMap {
+    pub felafax_token_to_id_map: HashMap<String, String>,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+struct Rollout {
+    pub id: String,
+    pub roll_out_percentage: Option<i64>,
 }
 
 impl Firestore {
@@ -43,6 +56,37 @@ impl Firestore {
 
     pub fn get_project_id(&self) -> String {
         self.project_id.clone()
+    }
+
+    pub async fn get_roll_out_percentage(&self, rollout_id: &str) -> Result<Option<i64>> {
+        Ok(None)
+    }
+
+    pub async fn get_user_id(&self, felafax_token: &str) -> Result<Option<String>> {
+        let id_to_user_map = self.get_id_to_user_map().await?;
+        match id_to_user_map {
+            Some(doc) => {
+                if doc.felafax_token_to_id_map.contains_key(felafax_token) {
+                    let user_id = doc.felafax_token_to_id_map.get(felafax_token);
+                    Ok(user_id.cloned())
+                } else {
+                    Ok(None)
+                }
+            }
+            None => Ok(None),
+        }
+    }
+
+    async fn get_id_to_user_map(&self) -> Result<Option<FelafaxTokenToIdMap>> {
+        let doc: Option<FelafaxTokenToIdMap> = self
+            .get_client()
+            .fluent()
+            .select()
+            .by_id_in(CUSTOMER_COLLECTION_NAME)
+            .obj()
+            .one("metadata")
+            .await?;
+        Ok(doc)
     }
 
     pub async fn init(&self) -> Result<()> {
