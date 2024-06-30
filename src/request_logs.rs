@@ -11,6 +11,7 @@ use std::sync::Arc;
 #[builder(setter(into, strip_option), default)]
 #[builder(pattern = "mutable")]
 #[builder(derive(Debug))]
+#[serde(default)]
 pub struct RequestLog {
     pub id: String,
 
