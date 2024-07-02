@@ -16,7 +16,7 @@
 ## Usage
 
 ### Proxy Mode
-```
+```py
 import os
 import json
 from openai import OpenAI
@@ -30,8 +30,6 @@ client = OpenAI(
 chat_completion = client.chat.completions.create(
     # continue with OpenAI uscase
 )
-
-
 ```
 ### Translate Mode
 ```py
@@ -79,6 +77,10 @@ docker run -p 8080:8080 -v $(pwd)/firebase.json:/firebase.json felafax-proxy
   - [x] OpenAI
   - [x] Claude
   - [x] Jamba
+
+## Roadmap:
+* [ ] Support configurable request log storage (S3, GCS, etc).
+* [ ] Support streaming completion in translate mode.
 
 
 
