@@ -71,6 +71,33 @@ docker build -t felafax-proxy .
 docker run -p 8080:8080 -v $(pwd)/firebase.json:/firebase.json felafax-proxy
 ```
 
+## Benchmarks
+> Comparision between OpenAI API and Felafax API on 20 iterations.
+
+| Metric                           | OpenAI API | Felafax API |
+|----------------------------------|------------|-------------|
+| Total_time (avg)                 | 1.36       | 1.53        |
+| Total_time (p75)                 | 1.46       | 1.78        |
+| Total_time (p95)                 | 2.39       | 2.25        |
+| Ttfb (avg)                       | 0.54       | 0.69        |
+| Ttfb (p75)                       | 0.63       | 0.79        |
+| Ttfb (p95)                       | 1.12       | 1.35        |
+| Request_to_response_time (avg)   | 0.54       | 0.68        |
+| Request_to_response_time (p75)   | 0.63       | 0.79        |
+| Request_to_response_time (p95)   | 1.12       | 1.35        |
+| Response_size (avg)              | 17833.85   | 19346.70    |
+| Response_size (p75)              | 20409.00   | 20991.00    |
+| Response_size (p95)              | 23761.25   | 32694.05    |
+| Transfer_rate (avg)              | 13585.13   | 12831.44    |
+| Transfer_rate (p75)              | 15039.40   | 14864.51    |
+| Transfer_rate (p95)              | 19186.19   | 17041.68    |
+| Chunk_count (avg)                | 17833.85   | 19346.70    |
+| Chunk_count (p75)                | 20409.00   | 20991.00    |
+| Chunk_count (p95)                | 23761.25   | 32694.05    |
+| Avg_time_between_chunks (avg)    | 0.00       | 0.00        |
+| Avg_time_between_chunks (p75)    | 0.00       | 0.00        |
+| Avg_time_between_chunks (p95)    | 0.00       | 0.00        |
+
 ## Supported Features
 * We support proxy for all OpenAI APIs.
 * We support `/chat/completions` for each of these LLMs.
