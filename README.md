@@ -1,4 +1,5 @@
 # Felafax Gateway
+website: https://felafax.dev/
 
 ## Overview
 `felafax-gateway` is a fast and lightweight proxy for LLMs, written in Rust. Designed for low latency and high scalability, it operates in two modes:
