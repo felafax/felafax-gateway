@@ -27,7 +27,7 @@ pub struct BackendConfigs {
 }
 
 async fn hello() -> &'static str {
-    "Hello from Felafax 🦊 Supported routes: /v1/chat/completions"
+    "Hello from Felafax 🦊"
 }
 
 pub async fn translate_chat_completion(
